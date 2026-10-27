@@ -223,7 +223,6 @@
   .steplist li.done .st { color: var(--muted); }
   .approval { display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; align-items: center; padding: 0.7rem 0; border-bottom: 1px solid var(--rule); }
   .error { color: var(--warn); font-size: 0.9rem; margin: 0.4rem 0 0; min-height: 1.2em; }
-  .warnline { color: var(--warn); }
   @media (max-width: 860px) {
     .form { grid-template-columns: 1fr; }
     .steplist li { grid-template-columns: 1.6rem 1fr; }
@@ -426,10 +425,8 @@
     return el("span", { class: "pill " + cls, text: status });
   }
 
-  // ---------------- call prep, written per client in data.py
-  var EMPTY_PREP = { situation: "", facts: [], talk: [], questions: ["What would make this go more smoothly for you?"],
-    objections: [], compliance: ["Keep every fee and agreement in writing."], goal: "", scenario: "s3" };
-  function prep(c) { return DATA.prep[c.id] || EMPTY_PREP; }
+  // ---------------- call prep, written per client in data.py (validate.py makes sure every client has one)
+  function prep(c) { return DATA.prep[c.id]; }
 
   // ---------------- practice, briefing and quizzes
   var SCENARIOS = DATA.scenarios, BRIEF_TAGS = DATA.briefTags, BRIEFING = DATA.briefing, ARTICLES = DATA.articles, QUIZZES = DATA.quizzes;
@@ -577,7 +574,7 @@
   }
 
   function viewPrep(v) {
-    var c = client(S.prepId) || S.clients[0];
+    var c = client(S.prepId);
     var sel = el("select", { "aria-label": "Client", onchange: function (e) { S.prepId = e.target.value; render(); } });
     S.clients.forEach(function (x) { var o = el("option", { value: x.id, text: x.name + ", " + x.role.toLowerCase() + " (" + x.stage.toLowerCase() + ")" }); if (x.id === c.id) o.selected = true; sel.appendChild(o); });
     var p = prep(c);
@@ -794,24 +791,20 @@
       var c = client(d.clientId);
       var ta = el("textarea", { "aria-label": "Draft to " + c.name }); ta.value = d.text;
       ta.addEventListener("input", function () { d.text = ta.value; });
-      var allowed = d.channel === "Email" || c.consent.indexOf("Text") === 0;
       v.appendChild(el("div", { class: "panel" },
         el("h3", null, "To " + c.name, el("span", { class: "badge", text: d.channel }), el("span", { class: "badge ai", text: "AI draft" })),
         el("p", { class: "fine", text: "Why now: " + d.reason + ". " + c.name + " opted in to " + c.consent.toLowerCase() + "." }),
         ta,
         el("div", { class: "row", style: "margin-top:0.5rem" },
-          el("button", { type: "button", class: "btn quiet", disabled: !allowed, onclick: function () {
+          el("button", { type: "button", class: "btn quiet", onclick: function () {
             copyText(d.text).then(function (ok) {
               if (ok) { toast("Copied. Paste it into your " + d.channel.toLowerCase() + ", then mark it as sent."); return; }
               ta.focus(); ta.select();
               toast("Couldn't copy here. The text is selected, so copy it yourself.");
             });
           } }, "Copy"),
-          el("button", { type: "button", class: "btn", disabled: !allowed, onclick: function () { markSent(d, c); } }, "Mark as sent"),
-          el("button", { type: "button", class: "btn quiet", onclick: function () { S.drafts = S.drafts.filter(function (x) { return x !== d; }); toast("Draft dismissed."); render(); } }, "Dismiss")),
-        !allowed ? el("div", { class: "row", style: "margin-top:0.5rem" },
-          el("p", { class: "fine warnline", style: "margin:0", text: c.name + " hasn't opted in to texts." }),
-          el("button", { type: "button", class: "btn quiet small", onclick: function () { d.channel = "Email"; render(); } }, "Switch to email")) : null));
+          el("button", { type: "button", class: "btn", onclick: function () { markSent(d, c); } }, "Mark as sent"),
+          el("button", { type: "button", class: "btn quiet", onclick: function () { S.drafts = S.drafts.filter(function (x) { return x !== d; }); toast("Draft dismissed."); render(); } }, "Dismiss"))));
     });
     if (S.sent.length) {
       v.appendChild(el("h2", { text: "Sent today" }));
@@ -821,7 +814,8 @@
 
   function loadBuilder(id) {
     var l = S.listings.filter(function (x) { return x.id === id; })[0];
-    if (!l) return;
+    // Only a draft or a listing Ryan sent back can be edited; the rest are with Ryan or live.
+    if (!l || (l.status !== "Draft" && l.status !== "Sent back")) return;
     if (S.builder.id === id) return;
     S.builder = { id: l.id, type: l.type, address: l.address, unit: l.unit, beds: l.beds, baths: "1", price: String(l.price), payer: "landlord",
       otherFees: "", highlights: "", notes: "", docs: { agreement: true, agency: true, photos: true }, desc: "", checked: false };
@@ -926,7 +920,7 @@
     right.appendChild(el("div", { class: "row", style: "margin-top:0.6rem" },
       el("button", { type: "button", class: "btn quiet", onclick: function () { b.checked = true; render(); } }, "Check listing"),
       el("button", { type: "button", class: "btn", id: "sendListing", disabled: !(b.checked && allPass), onclick: function () {
-        var data = { address: b.address.trim(), unit: b.unit.trim(), type: b.type, price: Number(b.price) || 0, beds: b.beds, status: "Waiting for approval", inquiries: 0, days: 0 };
+        var data = { address: b.address.trim(), unit: b.unit.trim(), type: b.type, price: Number(b.price), beds: b.beds, status: "Waiting for approval", inquiries: 0, days: 0 };
         var label;
         if (b.id) {
           var l = S.listings.filter(function (x) { return x.id === b.id; })[0];
