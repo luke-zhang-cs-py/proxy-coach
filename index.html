@@ -353,6 +353,8 @@
   }
   // "250 Demo Avenue, Queens, Unit 2B", or just the address when there's no unit
   function where(l) { return l.address + (l.unit ? ", Unit " + l.unit : ""); }
+  // Jamie can edit a draft or a listing Ryan sent back; the rest are with Ryan or live.
+  function canEdit(l) { return l.status === "Draft" || l.status === "Sent back"; }
 
   var ONBOARDING = DATA.onboarding;
   function onboardingCount() {
@@ -443,7 +445,7 @@
   function navCount(id) {
     if (id === "today") return S.tasks.filter(function (t) { return !t.done; }).length;
     if (id === "followups") return S.drafts.length;
-    if (id === "listings") return S.listings.filter(function (l) { return l.status === "Draft" || l.status === "Sent back"; }).length;
+    if (id === "listings") return S.listings.filter(canEdit).length;
     if (id === "team") return managerQueueCount();
     return 0;
   }
@@ -814,8 +816,7 @@
 
   function loadBuilder(id) {
     var l = S.listings.filter(function (x) { return x.id === id; })[0];
-    // Only a draft or a listing Ryan sent back can be edited; the rest are with Ryan or live.
-    if (!l || (l.status !== "Draft" && l.status !== "Sent back")) return;
+    if (!l || !canEdit(l)) return;
     if (S.builder.id === id) return;
     S.builder = { id: l.id, type: l.type, address: l.address, unit: l.unit, beds: l.beds, baths: "1", price: String(l.price), payer: "landlord",
       otherFees: "", highlights: "", notes: "", docs: { agreement: true, agency: true, photos: true }, desc: "", checked: false };
@@ -867,14 +868,13 @@
     v.appendChild(el("p", { class: "muted", text: "Build a listing, check it against the rules, then send it to Ryan to approve before it goes live." }));
     var tb = el("tbody");
     S.listings.forEach(function (l) {
-      var editable = l.status === "Draft" || l.status === "Sent back";
       tb.appendChild(el("tr", null,
         el("td", null, el("strong", { text: where(l) }), el("div", { class: "fine", text: bedsText(l.beds) + " for " + l.owner })),
         el("td", { text: l.type }),
         el("td", { class: "num", text: money(l.price) + (l.type === "Rental" ? " a month" : "") }),
         el("td", null, pill(l.status)),
         el("td", { class: "num", text: l.status === "Live" ? l.inquiries + " in " + l.days + " days" : "None yet" }),
-        el("td", null, editable ? el("button", { type: "button", class: "btn quiet small", onclick: function () { loadBuilder(l.id); render(); } }, "Edit") : null)));
+        el("td", null, canEdit(l) ? el("button", { type: "button", class: "btn quiet small", onclick: function () { loadBuilder(l.id); render(); } }, "Edit") : null)));
     });
     v.appendChild(el("div", { class: "tablewrap" }, el("table", { class: "data" },
       el("thead", null, el("tr", null, ["Listing", "Type", "Price", "Status", "Inquiries", ""].map(function (h) { return el("th", { text: h }); }))), tb)));
@@ -1044,7 +1044,7 @@
 
   // The first listing that still needs Jamie's work, for the coach's next-week plan
   function unfinishedListing() {
-    return S.listings.filter(function (l) { return l.status === "Draft" || l.status === "Sent back"; })[0];
+    return S.listings.filter(canEdit)[0];
   }
 
   function viewReview(v) {
